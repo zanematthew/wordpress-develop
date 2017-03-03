@@ -338,6 +338,9 @@ function is_taxonomy_hierarchical($taxonomy) {
  *                                                post_categories_meta_box() is used for hierarchical taxonomies, and
  *                                                post_tags_meta_box() is used for non-hierarchical. If false, no meta
  *                                                box is shown.
+ *     @type callable      $meta_box_sanitize_cb  Callback function for sanitizing taxonomy data saved from a meta
+ *                                                box. If no callback is defined, an appropriate one is determined
+ *                                                based on the value of `$meta_box_cb`.
  *     @type array         $capabilities {
  *         Array of capabilities for this taxonomy.
  *
