@@ -20,6 +20,25 @@ if ( !current_user_can('edit_themes') )
 $title = __("Edit Themes");
 $parent_file = 'themes.php';
 
+/**
+ * Given that the parameter; "shown_file_editor_warning" is present in the URL and set to true, we'll
+ * update the currently logged in users meta to include a flag that they have seen the "Edit Themes"
+ * message.
+ *
+ * This support to show a message to first time visitors of the treacherous "Editor" screen is
+ * introduced in ticket: 31779.
+ *
+ * See additional scattered comments.
+ */
+$meta_key       = 'shown_file_editor_warning';
+$meta           = get_user_meta( get_current_user_id(), $meta_key, true );
+
+if ( isset( $_GET['shown_file_editor_warning'] )  && true === (bool) $_GET['shown_file_editor_warning'] ) {
+	add_user_meta( get_current_user_id(), $meta_key, true, true );
+	wp_redirect( admin_url( get_current_screen()->id . '.php') );
+	exit;
+}
+
 get_current_screen()->add_help_tab( array(
 'id'		=> 'overview',
 'title'		=> __('Overview'),
@@ -164,126 +183,151 @@ if ( $description != $file_show )
 <div class="wrap">
 <h1><?php echo esc_html( $title ); ?></h1>
 
-<div class="fileedit-sub">
-<div class="alignleft">
-<h2><?php echo $theme->display( 'Name' ); if ( $description ) echo ': ' . $description; ?></h2>
-</div>
-<div class="alignright">
-	<form action="theme-editor.php" method="post">
-		<strong><label for="theme"><?php _e('Select theme to edit:'); ?> </label></strong>
-		<select name="theme" id="theme">
 <?php
-foreach ( wp_get_themes( array( 'errors' => null ) ) as $a_stylesheet => $a_theme ) {
-	if ( $a_theme->errors() && 'theme_no_stylesheet' == $a_theme->errors()->get_error_code() )
-		continue;
 
-	$selected = $a_stylesheet == $stylesheet ? ' selected="selected"' : '';
-	echo "\n\t" . '<option value="' . esc_attr( $a_stylesheet ) . '"' . $selected . '>' . $a_theme->display('Name') . '</option>';
-}
-?>
-		</select>
-		<?php submit_button( __( 'Select' ), '', 'Submit', false ); ?>
-	</form>
-</div>
-<br class="clear" />
-</div>
+/**
+ * If this is the first time the user has visited the "Editor" page of the WordPress admin
+ * we'll show them a message. Additional detail can be found in ticket: 31779.
+ */
+if ( empty( $meta ) ) :
+	$learn_more_url    = '';
+	$shown_message_url = admin_url( add_query_arg(
+		array( 'shown_file_editor_warning' => true ),
+		get_current_screen()->id . '.php'
+	) );
+	?>
+	<p><?php esc_attr_e( 'Warning: Editing files directly in the WordPress dashboard is risky and your changes may be lost when themes are updated.' ); ?></p>
+	<p><a href="<?php echo esc_url( $learn_more_url ); ?>"><?php esc_attr_e( 'Learn more about safely editing your theme.' ); ?></a></p>
+	<p><a href="<?php echo esc_url( $shown_message_url ); ?>" class="button-primary"><?php esc_attr_e( 'I got this.' ); ?></a></p>
+	<p><?php esc_attr_e( 'This message will not appear again.' ); ?></p>
+
 <?php
-if ( $theme->errors() )
-	echo '<div class="error"><p><strong>' . __( 'This theme is broken.' ) . '</strong> ' . $theme->errors()->get_error_message() . '</p></div>';
-?>
-	<div id="templateside">
-<?php
-if ( $allowed_files ) :
-	$previous_file_type = '';
-
-	foreach ( $allowed_files as $filename => $absolute_filename ) :
-		$file_type = substr( $filename, strrpos( $filename, '.' ) );
-
-		if ( $file_type !== $previous_file_type ) {
-			if ( '' !== $previous_file_type ) {
-				echo "\t</ul>\n";
-			}
-
-			switch ( $file_type ) {
-				case '.php':
-					if ( $has_templates || $theme->parent() ) :
-						echo "\t<h2>" . __( 'Templates' ) . "</h2>\n";
-						if ( $theme->parent() ) {
-							echo '<p class="howto">' . sprintf( __( 'This child theme inherits templates from a parent theme, %s.' ),
-								sprintf( '<a href="%s">%s</a>',
-									self_admin_url( 'theme-editor.php?theme=' . urlencode( $theme->get_template() ) ),
-									$theme->parent()->display( 'Name' )
-								)
-							) . "</p>\n";
-						}
-					endif;
-					break;
-				case '.css':
-					echo "\t<h2>" . _x( 'Styles', 'Theme stylesheets in theme editor' ) . "</h2>\n";
-					break;
-				default:
-					/* translators: %s: file extension */
-					echo "\t<h2>" . sprintf( __( '%s files' ), $file_type ) . "</h2>\n";
-					break;
-			}
-
-			echo "\t<ul>\n";
-		}
-
-		$file_description = get_file_description( $filename );
-		if ( $filename !== basename( $absolute_filename ) || $file_description !== $filename ) {
-			$file_description .= '<br /><span class="nonessential">(' . $filename . ')</span>';
-		}
-
-		if ( $absolute_filename === $file ) {
-			$file_description = '<span class="highlight">' . $file_description . '</span>';
-		}
-
-		$previous_file_type = $file_type;
-?>
-		<li><a href="theme-editor.php?file=<?php echo urlencode( $filename ) ?>&amp;theme=<?php echo urlencode( $stylesheet ) ?>"><?php echo $file_description; ?></a></li>
-<?php
-	endforeach;
-?>
-</ul>
-<?php endif; ?>
-</div>
-<?php if ( $error ) :
-	echo '<div class="error"><p>' . __('Oops, no such file exists! Double check the name and try again, merci.') . '</p></div>';
+/**
+ * Any subsequent request to the "Editor" page will show the below code. Additional
+ * detail can be found in ticket: 31779.
+ */
 else : ?>
-	<form name="template" id="template" action="theme-editor.php" method="post">
-	<?php wp_nonce_field( 'edit-theme_' . $file . $stylesheet ); ?>
-		<div><textarea cols="70" rows="30" name="newcontent" id="newcontent" aria-describedby="newcontent-description"><?php echo $content; ?></textarea>
-		<input type="hidden" name="action" value="update" />
-		<input type="hidden" name="file" value="<?php echo esc_attr( $relative_file ); ?>" />
-		<input type="hidden" name="theme" value="<?php echo esc_attr( $theme->get_stylesheet() ); ?>" />
-		<input type="hidden" name="scrollto" id="scrollto" value="<?php echo $scrollto; ?>" />
-		</div>
-	<?php if ( ! empty( $functions ) ) : ?>
-		<div id="documentation" class="hide-if-no-js">
-		<label for="docs-list"><?php _e('Documentation:') ?></label>
-		<?php echo $docs_select; ?>
-		<input type="button" class="button" value="<?php esc_attr_e( 'Look Up' ); ?>" onclick="if ( '' != jQuery('#docs-list').val() ) { window.open( 'https://api.wordpress.org/core/handbook/1.0/?function=' + escape( jQuery( '#docs-list' ).val() ) + '&amp;locale=<?php echo urlencode( get_user_locale() ) ?>&amp;version=<?php echo urlencode( get_bloginfo( 'version' ) ) ?>&amp;redirect=true'); }" />
-		</div>
-	<?php endif; ?>
+	<div class="fileedit-sub">
+	<div class="alignleft">
+	<h2><?php echo $theme->display( 'Name' ); if ( $description ) echo ': ' . $description; ?></h2>
+	</div>
+	<div class="alignright">
+		<form action="theme-editor.php" method="post">
+			<strong><label for="theme"><?php _e('Select theme to edit:'); ?> </label></strong>
+			<select name="theme" id="theme">
+	<?php
+	foreach ( wp_get_themes( array( 'errors' => null ) ) as $a_stylesheet => $a_theme ) {
+		if ( $a_theme->errors() && 'theme_no_stylesheet' == $a_theme->errors()->get_error_code() )
+			continue;
 
-		<div>
-		<?php if ( is_child_theme() && $theme->get_stylesheet() == get_template() ) : ?>
-			<p><?php if ( is_writeable( $file ) ) { ?><strong><?php _e( 'Caution:' ); ?></strong><?php } ?>
-			<?php _e( 'This is a file in your current parent theme.' ); ?></p>
-		<?php endif; ?>
-<?php
-	if ( is_writeable( $file ) ) :
-		submit_button( __( 'Update File' ), 'primary', 'submit', true );
+		$selected = $a_stylesheet == $stylesheet ? ' selected="selected"' : '';
+		echo "\n\t" . '<option value="' . esc_attr( $a_stylesheet ) . '"' . $selected . '>' . $a_theme->display('Name') . '</option>';
+	}
+	?>
+			</select>
+			<?php submit_button( __( 'Select' ), '', 'Submit', false ); ?>
+		</form>
+	</div>
+	<br class="clear" />
+	</div>
+	<?php
+	if ( $theme->errors() )
+		echo '<div class="error"><p><strong>' . __( 'This theme is broken.' ) . '</strong> ' . $theme->errors()->get_error_message() . '</p></div>';
+	?>
+		<div id="templateside">
+	<?php
+	if ( $allowed_files ) :
+		$previous_file_type = '';
+
+		foreach ( $allowed_files as $filename => $absolute_filename ) :
+			$file_type = substr( $filename, strrpos( $filename, '.' ) );
+
+			if ( $file_type !== $previous_file_type ) {
+				if ( '' !== $previous_file_type ) {
+					echo "\t</ul>\n";
+				}
+
+				switch ( $file_type ) {
+					case '.php':
+						if ( $has_templates || $theme->parent() ) :
+							echo "\t<h2>" . __( 'Templates' ) . "</h2>\n";
+							if ( $theme->parent() ) {
+								echo '<p class="howto">' . sprintf( __( 'This child theme inherits templates from a parent theme, %s.' ),
+									sprintf( '<a href="%s">%s</a>',
+										self_admin_url( 'theme-editor.php?theme=' . urlencode( $theme->get_template() ) ),
+										$theme->parent()->display( 'Name' )
+									)
+								) . "</p>\n";
+							}
+						endif;
+						break;
+					case '.css':
+						echo "\t<h2>" . _x( 'Styles', 'Theme stylesheets in theme editor' ) . "</h2>\n";
+						break;
+					default:
+						/* translators: %s: file extension */
+						echo "\t<h2>" . sprintf( __( '%s files' ), $file_type ) . "</h2>\n";
+						break;
+				}
+
+				echo "\t<ul>\n";
+			}
+
+			$file_description = get_file_description( $filename );
+			if ( $filename !== basename( $absolute_filename ) || $file_description !== $filename ) {
+				$file_description .= '<br /><span class="nonessential">(' . $filename . ')</span>';
+			}
+
+			if ( $absolute_filename === $file ) {
+				$file_description = '<span class="highlight">' . $file_description . '</span>';
+			}
+
+			$previous_file_type = $file_type;
+	?>
+			<li><a href="theme-editor.php?file=<?php echo urlencode( $filename ) ?>&amp;theme=<?php echo urlencode( $stylesheet ) ?>"><?php echo $file_description; ?></a></li>
+	<?php
+		endforeach;
+	?>
+	</ul>
+	<?php endif; ?>
+	</div>
+	<?php if ( $error ) :
+		echo '<div class="error"><p>' . __('Oops, no such file exists! Double check the name and try again, merci.') . '</p></div>';
 	else : ?>
-<p><em><?php _e('You need to make this file writable before you can save your changes. See <a href="https://codex.wordpress.org/Changing_File_Permissions">the Codex</a> for more information.'); ?></em></p>
-<?php endif; ?>
-		</div>
-	</form>
-<?php
-endif; // $error
-?>
-<br class="clear" />
+		<form name="template" id="template" action="theme-editor.php" method="post">
+		<?php wp_nonce_field( 'edit-theme_' . $file . $stylesheet ); ?>
+			<div><textarea cols="70" rows="30" name="newcontent" id="newcontent" aria-describedby="newcontent-description"><?php echo $content; ?></textarea>
+			<input type="hidden" name="action" value="update" />
+			<input type="hidden" name="file" value="<?php echo esc_attr( $relative_file ); ?>" />
+			<input type="hidden" name="theme" value="<?php echo esc_attr( $theme->get_stylesheet() ); ?>" />
+			<input type="hidden" name="scrollto" id="scrollto" value="<?php echo $scrollto; ?>" />
+			</div>
+		<?php if ( ! empty( $functions ) ) : ?>
+			<div id="documentation" class="hide-if-no-js">
+			<label for="docs-list"><?php _e('Documentation:') ?></label>
+			<?php echo $docs_select; ?>
+			<input type="button" class="button" value="<?php esc_attr_e( 'Look Up' ); ?>" onclick="if ( '' != jQuery('#docs-list').val() ) { window.open( 'https://api.wordpress.org/core/handbook/1.0/?function=' + escape( jQuery( '#docs-list' ).val() ) + '&amp;locale=<?php echo urlencode( get_user_locale() ) ?>&amp;version=<?php echo urlencode( get_bloginfo( 'version' ) ) ?>&amp;redirect=true'); }" />
+			</div>
+		<?php endif; ?>
+
+			<div>
+			<?php if ( is_child_theme() && $theme->get_stylesheet() == get_template() ) : ?>
+				<p><?php if ( is_writeable( $file ) ) { ?><strong><?php _e( 'Caution:' ); ?></strong><?php } ?>
+				<?php _e( 'This is a file in your current parent theme.' ); ?></p>
+			<?php endif; ?>
+	<?php
+		if ( is_writeable( $file ) ) :
+			submit_button( __( 'Update File' ), 'primary', 'submit', true );
+		else : ?>
+	<p><em><?php _e('You need to make this file writable before you can save your changes. See <a href="https://codex.wordpress.org/Changing_File_Permissions">the Codex</a> for more information.'); ?></em></p>
+	<?php endif; ?>
+			</div>
+		</form>
+	<?php
+	endif; // $error
+	?>
+	<?php endif; // End Warning Users check. ?>
+	<br class="clear" />
 </div>
 <script type="text/javascript">
 jQuery(document).ready(function($){
